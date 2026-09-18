@@ -43,7 +43,8 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
           make defconfig
-          # 核心优化：提前开启 8 线程下载所有必要的包，并清理下载失败的残次品
+          # 核心修复：强制先编译宿主机打包工具 usign，防止 package index 打包报错
+          make tools/usign/compile V=s
           make download -j8
           find dl -size -1024c -exec ls -l {} \;
           find dl -size -1024c -exec rm -f {} \;
@@ -51,7 +52,6 @@ jobs:
       - name: Start Building Firmware (开始编译固件)
         run: |
           cd openwrt
-          # 自动根据 CPU 核心数全速编译，如果失败则回退到单线程输出详细报错日志
           make -j$(nproc) || make -j1 V=s
 
       - name: Upload Artifacts (上传编译好的固件)
