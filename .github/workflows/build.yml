@@ -1,6 +1,6 @@
 name: Build ImmortalWrt
 
-on: 
+on:
   workflow_dispatch:
 
 env:
@@ -9,9 +9,9 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    
+
     steps:
-      - name: Checkout Source
+      - name: Checkout Source (检出当前仓库代码)
         uses: actions/checkout@v4
 
       - name: Free Disk Space (清理磁盘空间)
@@ -20,7 +20,7 @@ jobs:
           sudo docker image prune --all --force
           sudo -E apt-get clean
 
-      - name: Initialization Environment (初始化环境)
+      - name: Initialization Environment (初始化编译环境)
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
@@ -29,22 +29,21 @@ jobs:
           sudo -E apt-get -y autoremove --purge
           sudo -E apt-get clean
 
-      - name: Clone Source Code (拉取源码)
+      - name: Clone Source Code (拉取 23.05 稳定分支源码)
         run: |
           git clone -b openwrt-23.05 https://github.com/immortalwrt/immortalwrt.git openwrt
 
-      - name: Copy Custom Config (应用配置文件)
+      - name: Copy Custom Config (应用自定义配置文件)
         run: |
           cp .config openwrt/.config
 
-      - name: Update Feeds & Download Package (预下载编译依赖包)
+      - name: Update Feeds & Download Package (更新 Feed 并预下载依赖)
         run: |
           cd openwrt
           ./scripts/feeds update -a
           ./scripts/feeds install -a
           make defconfig
-          # 核心修复：强制先编译宿主机打包工具 usign，防止 package index 打包报错
-          make tools/usign/compile V=s
+          # 预下载所有源码包，清理无效残包
           make download -j8
           find dl -size -1024c -exec ls -l {} \;
           find dl -size -1024c -exec rm -f {} \;
@@ -52,9 +51,13 @@ jobs:
       - name: Start Building Firmware (开始编译固件)
         run: |
           cd openwrt
+          # 先单独编译安装底层工具链，防止 usign 等打包签名工具缺失
+          make tools/install -j$(nproc)
+          make toolchain/install -j$(nproc)
+          # 开始全速多线程编译；若失败则自动回退到单线程输出详细 Log
           make -j$(nproc) || make -j1 V=s
 
-      - name: Upload Artifacts (上传编译好的固件)
+      - name: Upload Artifacts (上传编译产物)
         uses: actions/upload-artifact@v4
         with:
           name: ImmortalWrt-R619AC-Firmware
