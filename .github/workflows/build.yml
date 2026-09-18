@@ -1,0 +1,51 @@
+name: Build ImmortalWrt
+
+on: 
+  workflow_dispatch: # 支持手动点击按钮触发编译
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Initialization Environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo -E apt-get -y update
+          sudo -E apt-get -y install build-gettext asciidoc binutils bzip2 gawk gettext git libncurses5-dev libz-dev patch python3 python3-pip rsync unzip zlib1g-dev libssl-dev wget subversion swig flex bison upx-ucl
+          sudo -E apt-get -y autoremove --purge
+          sudo -E apt-get clean
+
+      - name: Clone Source Code
+        run: |
+          git clone -b openwrt-23.05 https://github.com/immortalwrt/immortalwrt.git openwrt
+          cd openwrt
+          # 如果你需要手动合并 feeds，可以在这里处理
+
+      - name: Copy Custom Config
+        run: |
+          # 将你根目录下的 .config 文件复制到编译源码目录中
+          cp .config openwrt/.config
+
+      - name: Update Feeds & Download Package
+        run: |
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          make defconfig
+
+      - name: Start Building Firmware
+        run: |
+          cd openwrt
+          make -j$(nproc) || make -j1 V=s
+
+      - name: Upload Artifacts (Firmware)
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenWrt-Firmware
+          path: openwrt/bin/targets/**/*.bin
